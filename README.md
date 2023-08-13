@@ -25,6 +25,6 @@ Adding more exchanges / symbols to watch would generate alot of data
 - wrap main to run continously and handle errors better
 
 ## Links used:
-https://github.com/ccxt/ccxt/blob/master/examples/ccxt.pro/py/one-exchange-different-streams.py
-https://docs.ccxt.com/#/?id=error-handling
-https://github.com/ccxt/ccxt/blob/master/examples/ccxt.pro/py/build-ohlcv-many-symbols.py
+- https://github.com/ccxt/ccxt/blob/master/examples/ccxt.pro/py/one-exchange-different-streams.py
+- https://docs.ccxt.com/#/?id=error-handling
+- https://github.com/ccxt/ccxt/blob/master/examples/ccxt.pro/py/build-ohlcv-many-symbols.py
