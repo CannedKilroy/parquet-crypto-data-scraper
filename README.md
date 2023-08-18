@@ -17,12 +17,12 @@ Adding more exchanges / symbols to watch would generate alot of data
 
 ## TODO:
 - function that translates bybit symbol to ccxt symbol
-- add requirements.txt
 - add exchange symbol and humanreadable symbol to tables
 - async sqlalchemy, eventually time series database as dataset grows
 - add config file for ohlcv timeframe, exchanges, symbols, db location, orderbook depth, timeout
 - input for db
 - wrap main to run continously and handle errors better
+- add async.sleep() to each stream to breakup execution and send heartbeat more often
 
 ## Links used:
 - https://github.com/ccxt/ccxt/blob/master/examples/ccxt.pro/py/one-exchange-different-streams.py
