@@ -23,6 +23,7 @@ Adding more exchanges / symbols to watch would generate alot of data
 - input for db
 - wrap main to run continously and handle errors better
 - add async.sleep() to each stream to breakup execution and send heartbeat more often
+- add catch all except that catches keyboard interupts etc to close the db properly then exit
 
 ## Links used:
 - https://github.com/ccxt/ccxt/blob/master/examples/ccxt.pro/py/one-exchange-different-streams.py
