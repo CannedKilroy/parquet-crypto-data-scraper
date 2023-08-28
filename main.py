@@ -5,12 +5,14 @@ import logging
 import time
 import json
 import pprint
-import numpy as np
 import sys
 import datetime
 
 from storage import meta, table_ohlcv, table_orderbook, table_trades, table_ticker, table_logs
 from sqlalchemy import create_engine
+
+engine = create_engine('sqlite:///data.db', echo = False)
+meta.create_all(engine)
 
 #symbols
 btc_inverse_perp = 'BTC/USD:BTC'
@@ -27,12 +29,7 @@ if sys.version_info < (3,7):
     print("This script requires Python 3.7 or higher.")
     sys.exit(1)
 print('CCXT version', ccxt.pro.__version__)
-print('Supported exchanges:', ccxt.pro.exchanges)
 
-engine = create_engine('sqlite:///data.db', echo = False)
-meta.create_all(engine)
-
-#https://github.com/ccxt/ccxt/blob/master/examples/ccxt.pro/py/one-exchange-different-streams.py
 async def watch_order_book(exchange, symbol, orderbook_depth):
     '''
     Watch the order book for a specific symbol.
@@ -48,7 +45,6 @@ async def watch_order_book(exchange, symbol, orderbook_depth):
     while True:
         try:
             orderbook = await exchange.watch_order_book(symbol, orderbook_depth)
-                
             with engine.connect() as conn:
                 command = table_orderbook.insert().values(
                     exchange = name,
@@ -79,21 +75,21 @@ async def watch_trades(exchange, symbol):
     while True:
         try:
             trades = await exchange.watch_trades(symbol)
-            
             with engine.connect() as conn:
                 for trade in trades:
                     command = table_trades.insert().values(
                     exchange = name,
+                    symbol = symbol,
                     trade_id = trade['id'],
                     order_id = trade['order'],
                     order_type = trade['type'],
                     trade_side = trade['side'],
-                    takerormaker = trade['takerOrMaker'],
+                    taker_maker = trade['takerOrMaker'],
                     executed_price = trade['price'],
                     base_amount = trade['amount'],
                     cost = trade['cost'],
                     fee = trade['fee'],
-                    fees = trade['fees'],
+                    fees = trade['fees'] if trade['fees'] else None,
                     datetime = datetime.datetime.fromisoformat(trade['datetime']),
                     created_at = trade['timestamp']
                     )
@@ -106,7 +102,6 @@ async def watch_trades(exchange, symbol):
             raise e
 
 async def watch_ohlcv(exchange, symbol, timeframe, candle_limit):
-    #https://github.com/ccxt/ccxt/blob/master/examples/ccxt.pro/py/build-ohlcv-many-symbols.py
     '''
     Watch the OHLCV data for a specific symbol.
 
@@ -137,7 +132,8 @@ async def watch_ohlcv(exchange, symbol, timeframe, candle_limit):
                         low_price = last_candle[0][3],
                         close_price = last_candle[0][4],
                         candle_volume = last_candle[0][5],
-                        utc_timestamp = last_candle[0][0]
+                        created_at = last_candle[0][0],
+                        datetime = exchange.iso8601(last_candle[0][0])
                         )
                 
                     conn.execute(command)
@@ -166,21 +162,21 @@ async def watch_ticker(exchange, symbol):
                 exchange = name,
                 symbol = symbol,
                 ask = ticker['ask'],
-                askvolume = ticker['askVolume'],
+                ask_volume = ticker['askVolume'],
                 bid = ticker['bid'],
-                bidvolume = ticker['bidVolume'],
+                bid_volume = ticker['bidVolume'],
                 open_24h = ticker['open'],
                 high_24h = ticker['high'],
                 low_24h = ticker['low'],
                 close_24h = ticker['close'],
                 last_price = ticker['last'],
                 vwap = ticker['vwap'],
-                previousclose_price = ticker['previousClose'],
+                previous_close_price = ticker['previousClose'],
                 price_change = ticker['change'],
                 percentage_change = ticker['percentage'],
                 average_price = ticker['average'],
-                basevolume = ticker['baseVolume'],
-                quotevolume = ticker['quoteVolume'],
+                base_volume = ticker['baseVolume'],
+                quote_volume = ticker['quoteVolume'],
                 info = ticker['info'],
                 datetime = datetime.datetime.fromisoformat(ticker['datetime']),
                 created_at = ticker['timestamp']
