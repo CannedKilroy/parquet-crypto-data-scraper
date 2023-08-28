@@ -8,9 +8,12 @@ table_orderbook = Table(
    Column('id', Integer, primary_key = True),
    Column('exchange', String, index = True, nullable = False),
    Column('symbol', String, index = True, nullable = False),
+   
    Column('asks', JSON, nullable = False),
    Column('bids', JSON, nullable = False),
    Column('nonce', String, nullable = True),
+   
+   Column('datetime', DATETIME),
    Column('created_at', INT, nullable = False, index = True)
    )
 
@@ -20,23 +23,25 @@ table_ticker = Table(
     Column('id', Integer, primary_key = True),
     Column('exchange', String, index = True),
     Column('symbol', String, index = True),
+   
     Column('ask', REAL),
-    Column('askvolume', REAL),
+    Column('ask_volume', REAL),
     Column('bid', REAL),
-    Column('bidvolume', REAL),
+    Column('bid_volume', REAL),
     Column('open_24h', REAL), #OHLCV
     Column('high_24h', REAL),
     Column('low_24h', REAL),
     Column('close_24h', REAL),
     Column('last_price',REAL), #same as close
     Column('vwap', REAL),
-    Column('previousclose_price', REAL),
+    Column('previous_close_price', REAL),
     Column('price_change', REAL), #last-open
     Column('percentage_change', REAL),
     Column('average_price', REAL),
-    Column('basevolume', REAL),
-    Column('quotevolume', REAL),
+    Column('base_volume', REAL),
+    Column('quote_volume', REAL),
     Column('info', JSON), #original ticker data from exchange
+   
     Column('datetime', DATETIME),
     Column('created_at', INT, index = True)
 )
@@ -47,16 +52,18 @@ table_trades = Table(
     Column('id', Integer, primary_key = True),
     Column('exchange', String, index = True),
     Column('symbol', String, index = True),
+   
     Column('trade_id', String),
     Column('order_id', String),
     Column('order_type', String),
     Column('trade_side', String),
-    Column('takerormaker', String),
+    Column('taker_maker', String),
     Column('executed_price', REAL),
     Column('base_amount', REAL),
     Column('cost', REAL),
     Column('fee', JSON),
     Column('fees', JSON),
+   
     Column('datetime', DATETIME),
     Column('created_at', INT, index = True)
 )
@@ -67,12 +74,15 @@ table_ohlcv = Table(
     Column('id', Integer, primary_key = True),
     Column('exchange', String, index = True),
     Column('symbol', String, index = True),
+   
     Column('open_price', REAL),
     Column('high_price', REAL),
     Column('low_price', REAL),
     Column('close_price', REAL),
     Column('candle_volume', REAL),
-    Column('utc_timestamp', INT, index = True)
+    
+    Column('datetime', DATETIME),    
+    Column('created_at', INT, index = True)
     )
 
 table_logs = Table(
