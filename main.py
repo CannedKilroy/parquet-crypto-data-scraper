@@ -122,7 +122,9 @@ async def watch_ohlcv(exchange, symbol, timeframe, candle_limit):
             
             #if timestamps are not equal
             if last_candle[0][0] != candle[0][0]:
-                
+                datetime_str = exchange.iso8601(last_candle[0][0])
+                datetime_obj = datetime.datetime.strptime(datetime_str, '%Y-%m-%dT%H:%M:%S.%fZ')
+
                 with engine.connect() as conn:
                     command = table_ohlcv.insert().values(
                         exchange = name,
@@ -133,7 +135,7 @@ async def watch_ohlcv(exchange, symbol, timeframe, candle_limit):
                         close_price = last_candle[0][4],
                         candle_volume = last_candle[0][5],
                         created_at = last_candle[0][0],
-                        datetime = exchange.iso8601(last_candle[0][0])
+                        datetime = datetime.datetime.utcfromtimestamp(last_candle[0][0]/1000)
                         )
                 
                     conn.execute(command)
