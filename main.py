@@ -52,6 +52,7 @@ async def watch_order_book(exchange, symbol, orderbook_depth):
                     asks = orderbook['asks'],
                     bids = orderbook['bids'],
                     nonce = orderbook['nonce'],
+                    datetime = datetime.datetime.fromisoformat(orderbook['datetime']),
                     created_at = orderbook['timestamp']
                     )
                 conn.execute(command)
