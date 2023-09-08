@@ -9,7 +9,7 @@ import sys
 import datetime
 
 from storage import meta, table_ohlcv, table_orderbook, table_trades, table_ticker, table_logs
-from sqlalchemy import create_engine
+from sqlalchemy.ext.asyncio import create_async_engine
 
 #symbols
 btc_inverse_perp = 'BTC/USD:BTC'
@@ -53,7 +53,7 @@ async def watch_order_book(exchange, symbol, orderbook_depth, engine):
                         bids = orderbook['bids'],
                         nonce = orderbook['nonce'],
                         datetime = datetime.datetime.fromisoformat(orderbook['datetime']),
-                        created_at = orderbook['timestamp']
+                        created_at = orderbook['timestamp'])
                     )
             await conn.close()
         
@@ -154,8 +154,8 @@ async def watch_ticker(exchange, symbol, engine):
     :param symbol: The trading symbol
     '''
     name = getattr(exchange, 'name')
-        
-   while True:
+    
+    while True:
         try:
             ticker = await exchange.watch_ticker(symbol)
             
