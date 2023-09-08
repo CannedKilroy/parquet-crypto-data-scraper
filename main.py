@@ -11,21 +11,21 @@ import datetime
 from storage import meta, table_ohlcv, table_orderbook, table_trades, table_ticker, table_logs
 from sqlalchemy.ext.asyncio import create_async_engine
 
-#symbols
-btc_inverse_perp = 'BTC/USD:BTC'
-btc_linear_perp = 'BTC/USDT:USDT'
-
-#settings
-timeframe = '1m'
-orderbook_depth = 50
-timeout = 10 #seconds
-candle_limit = 1
-
 print('Python version: ', sys.version_info)
 if sys.version_info < (3,7):
     print("This script requires Python 3.7 or higher.")
     sys.exit(1)
 print('CCXT version', ccxt.pro.__version__)
+
+#read settings from config file
+config = configparser.ConfigParser()
+config.read('config.ini')
+btc_inverse_perp = config['symbols']['btc_inverse_perp']
+btc_linear_perp = config['symbols']['btc_linear_perp']
+timeframe = config['settings']['timeframe']
+orderbook_depth = int(config['settings']['orderbook_depth'])
+timeout = int(config['settings']['timeout'])
+candle_limit = int(config['settings']['candle_limit'])
 
 async def watch_order_book(exchange, symbol, orderbook_depth, engine):
     '''
