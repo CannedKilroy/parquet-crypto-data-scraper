@@ -7,6 +7,7 @@ import json
 import pprint
 import sys
 import datetime
+import configparser
 
 from storage import meta, table_ohlcv, table_orderbook, table_trades, table_ticker, table_logs
 from sqlalchemy.ext.asyncio import create_async_engine
