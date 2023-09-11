@@ -1,4 +1,4 @@
-![Alt Text](https://github.com/CannedKilroy/crypto/blob/main/Assets/CCXT(2).png)
+![Alt Text](https://github.com/CannedKilroy/crypto/blob/main/Assets/ccxt_resize.png)
 # Cryptocurrency Futures Data Capture Tool
 
 Python script that captures and stores realtime cryptocurrency websocket data asynchronously, using the ccxt library and sqlalchemy with sqlite. Any ccxt supported exchange and symbol should work. After exchange connection is made and tables created, websocket OHLCV, ticker, trades, and orderbook data are checked for uniquness and then inserted into a their own table.
