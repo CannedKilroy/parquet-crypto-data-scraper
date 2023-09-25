@@ -69,6 +69,7 @@ async def watch_trades(exchange, symbol, engine):
     
     :param exchange: The exchange object
     :param symbol: The trading symbol
+    :param engine: SQLalchemy engine
     '''
     name = getattr(exchange, 'name')
     
@@ -110,6 +111,7 @@ async def watch_ohlcv(exchange, symbol, timeframe, candle_limit, engine):
     :param symbol: The trading symbol
     :param timeframe: The timeframe for the OHLCV data
     :param candle_limit: The number of candles to fetch
+    :param engine: SQLalchemy engine
     '''
     last_candle = None
     name = getattr(exchange, 'name')
@@ -153,6 +155,7 @@ async def watch_ticker(exchange, symbol, engine):
 
     :param exchange: The exchange object
     :param symbol: The trading symbol
+    :param engine: SQLalchemy engine
     '''
     name = getattr(exchange, 'name')
     
