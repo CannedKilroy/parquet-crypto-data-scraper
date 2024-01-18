@@ -21,12 +21,19 @@ print('CCXT version', ccxt.pro.__version__)
 #read settings from config file
 config = configparser.ConfigParser()
 config.read('config.ini')
+
 btc_inverse_perp = config['symbols']['btc_inverse_perp']
 btc_linear_perp = config['symbols']['btc_linear_perp']
 timeframe = config['settings']['timeframe']
 orderbook_depth = int(config['settings']['orderbook_depth'])
 timeout = int(config['settings']['timeout'])
 candle_limit = int(config['settings']['candle_limit'])
+
+user = config['credentials']['user']
+password = config['credentials']['password']
+host = config['credentials']['host']
+port = config['credentials']['port']
+dbname = config['credentials']['dbname']
 
 async def watch_order_book(exchange, symbol, orderbook_depth, engine):
     '''
@@ -196,6 +203,15 @@ async def watch_ticker(exchange, symbol, engine):
             raise e
 
 async def main():
+    #'mysql+aiomysql://user:password@host:port/dbname'
+    #engine_url = 'mysql+aiomysql://root:root@localhost:3306'
+    #engine = create_async_engine(engine_url, echo=True)
+    
+    #db_url = 
+    
+    #engine.execute("CREATE DATABASE ?")
+    #engine.execute("USE {}")
+    
     engine = create_async_engine(
         'sqlite+aiosqlite:///dataaa.db', 
         echo = True)
