@@ -11,6 +11,9 @@ import configparser
 
 from storage import meta, table_ohlcv, table_orderbook, table_trades, table_ticker, table_logs
 from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy import text
+from sqlalchemy_utils import database_exists, create_database
+
 
 print('Python version: ', sys.version_info)
 if sys.version_info < (3,7):
@@ -29,11 +32,11 @@ orderbook_depth = int(config['settings']['orderbook_depth'])
 timeout = int(config['settings']['timeout'])
 candle_limit = int(config['settings']['candle_limit'])
 
-user = config['credentials']['user']
+username = config['credentials']['user']
 password = config['credentials']['password']
 host = config['credentials']['host']
 port = config['credentials']['port']
-dbname = config['credentials']['dbname']
+db_name = config['credentials']['dbname']
 
 async def watch_order_book(exchange, symbol, orderbook_depth, engine):
     '''
@@ -203,18 +206,17 @@ async def watch_ticker(exchange, symbol, engine):
             raise e
 
 async def main():
-    #'mysql+aiomysql://user:password@host:port/dbname'
-    #engine_url = 'mysql+aiomysql://root:root@localhost:3306'
-    #engine = create_async_engine(engine_url, echo=True)
     
-    #db_url = 
+    # Create temporary engine to create database    
+    temp_url = f'mysql+aiomysql://{username}:{password}@{host}:{port}/'
+    temp_engine = create_async_engine(temp_url, echo=True)
+    async with temp_engine.begin() as conn:
+        await conn.execute(text(f"CREATE DATABASE IF NOT EXISTS {db_name}"))
+    await temp_engine.dispose()
     
-    #engine.execute("CREATE DATABASE ?")
-    #engine.execute("USE {}")
-    
-    engine = create_async_engine(
-        'sqlite+aiosqlite:///dataaa.db', 
-        echo = True)
+    # Create engine
+    engine_url = f'{temp_url}{db_name}'
+    engine = create_async_engine(engine_url, echo=True)    
     async with engine.begin() as conn:
         await conn.run_sync(meta.create_all)
     

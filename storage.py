@@ -1,28 +1,28 @@
 #datastorage
-from sqlalchemy import create_engine, Table, Column, Integer, String, MetaData, JSON, REAL, DATETIME, INT, UniqueConstraint
+from sqlalchemy import create_engine, Table, Column, Integer, String, MetaData, JSON, REAL, DATETIME, INT, UniqueConstraint, BigInteger
 meta = MetaData()
 
 table_orderbook = Table(
    'orderbook', 
    meta, 
    Column('id', Integer, primary_key = True),
-   Column('exchange', String, index = True, nullable = False),
-   Column('symbol', String, index = True, nullable = False),
+   Column('exchange', String(32), index = True, nullable = False),
+   Column('symbol', String(16), index = True, nullable = False),
    
    Column('asks', JSON, nullable = False),
    Column('bids', JSON, nullable = False),
-   Column('nonce', String, nullable = True),
+   Column('nonce', String(32), nullable = True),
    
    Column('datetime', DATETIME),
-   Column('created_at', INT, nullable = False, index = True)
+   Column('created_at', BigInteger, nullable = False, index = True)
    )
 
 table_ticker = Table(
     'ticker',
     meta,
     Column('id', Integer, primary_key = True),
-    Column('exchange', String, index = True),
-    Column('symbol', String, index = True),
+    Column('exchange', String(32), index = True),
+    Column('symbol', String(16), index = True),
    
     Column('ask', REAL),
     Column('ask_volume', REAL),
@@ -43,21 +43,21 @@ table_ticker = Table(
     Column('info', JSON), #original ticker data from exchange
    
     Column('datetime', DATETIME),
-    Column('created_at', INT, index = True)
+    Column('created_at', BigInteger, index = True)
 )
 
 table_trades = Table(
     'trades',
     meta,
     Column('id', Integer, primary_key = True),
-    Column('exchange', String, index = True),
-    Column('symbol', String, index = True),
+    Column('exchange', String(32), index = True),
+    Column('symbol', String(16), index = True),
    
-    Column('trade_id', String),
-    Column('order_id', String),
-    Column('order_type', String),
-    Column('trade_side', String),
-    Column('taker_maker', String),
+    Column('trade_id', String(64)),
+    Column('order_id', String(64)),
+    Column('order_type', String(32)),
+    Column('trade_side', String(32)),
+    Column('taker_maker', String(16)),
     Column('executed_price', REAL),
     Column('base_amount', REAL),
     Column('cost', REAL),
@@ -65,15 +65,15 @@ table_trades = Table(
     Column('fees', JSON),
    
     Column('datetime', DATETIME),
-    Column('created_at', INT, index = True)
+    Column('created_at', BigInteger, index = True)
 )
 
 table_ohlcv = Table(
     'ohlcv',
     meta,
     Column('id', Integer, primary_key = True),
-    Column('exchange', String, index = True),
-    Column('symbol', String, index = True),
+    Column('exchange', String(32), index = True),
+    Column('symbol', String(16), index = True),
    
     Column('open_price', REAL),
     Column('high_price', REAL),
@@ -82,13 +82,13 @@ table_ohlcv = Table(
     Column('candle_volume', REAL),
     
     Column('datetime', DATETIME),    
-    Column('created_at', INT, index = True)
+    Column('created_at', BigInteger, index = True)
     )
 
 table_logs = Table(
     'logs',
     meta,
     Column('id', Integer, primary_key = True),
-    Column('message', String),
-    Column('created_at', INT, index = True)
+    Column('message', String(512)),
+    Column('created_at', BigInteger, index = True)
     )
