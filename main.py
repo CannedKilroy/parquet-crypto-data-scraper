@@ -38,6 +38,22 @@ host = config['credentials']['host']
 port = config['credentials']['port']
 db_name = config['credentials']['dbname']
 
+async def watch_market_data(exchange, symbol, engine, timeframe, candle_limit, orderbook_depth):
+    loops = []
+    if exchange.has["watchOHLCV"]:
+        loops.append(
+            watch_ohlcv(exchange, symbol, timeframe, candle_limit, engine))
+    if exchange.has["watchTicker"]:
+        loops.append(
+            watch_ticker(exchange, symbol, engine))
+    if exchange.has["watchTrades"]:
+        loops.append(
+            watch_trades(exchange, symbol, engine))
+    if exchange.has["watchOrderBook"]:
+        loops.append(
+            watch_order_book(exchange, symbol, orderbook_depth, engine))
+    await asyncio.gather(*loops)
+
 async def watch_order_book(exchange, symbol, orderbook_depth, engine):
     '''
     Watch the order book for a specific symbol.
@@ -222,26 +238,14 @@ async def main():
     
     exchange = ccxt.pro.bybit({'newUpdates':True,'enableRateLimit': True, 'verbose':True})
     
-    await exchange.load_markets()        
+    await exchange.load_markets()
+    
     symbol = btc_inverse_perp
     
-    loops = []
-    if exchange.has["watchOHLCV"]:
-        loops.append(
-            watch_ohlcv(exchange, symbol, timeframe, candle_limit, engine))
-    if exchange.has["watchTicker"]:
-        loops.append(
-            watch_ticker(exchange, symbol, engine))
-    if exchange.has["watchTrades"]:
-        loops.append(
-            watch_trades(exchange, symbol, engine))
-    if exchange.has["watchOrderBook"]:
-        loops.append(
-            watch_order_book(exchange, symbol, orderbook_depth, engine))
-    
-    while True:
-        await asyncio.gather(*loops)
-    await exchange.close()
-
+    try:
+        await watch_market_data(exchange, symbol, engine, timeframe, candle_limit, orderbook_depth)
+    finally:
+        await exchange.close()
+        
 if __name__ == "__main__":
     asyncio.run(main())
