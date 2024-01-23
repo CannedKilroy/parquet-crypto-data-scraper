@@ -1,2 +1,3 @@
 ccxt==4.0.42
 SQLAlchemy==2.0.19
+SQLAlchemy_Utils==0.41.1
