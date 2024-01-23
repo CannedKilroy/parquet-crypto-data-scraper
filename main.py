@@ -13,6 +13,9 @@ from storage import meta, table_ohlcv, table_orderbook, table_trades, table_tick
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy import text
 from sqlalchemy_utils import database_exists, create_database
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+
+from sqlalchemy.orm import sessionmaker
 
 
 print('Python version: ', sys.version_info)
@@ -69,21 +72,18 @@ async def watch_order_book(exchange, symbol, orderbook_depth, engine):
     while True:
         try:
             orderbook = await exchange.watch_order_book(symbol, orderbook_depth)
-            conn = await engine.connect()
 
-            async with conn.begin():
-                await conn.execute(
-                    table_orderbook.insert().values(
-                        exchange = name,
-                        symbol = orderbook['symbol'],
-                        asks = orderbook['asks'],
-                        bids = orderbook['bids'],
-                        nonce = orderbook['nonce'],
-                        datetime = datetime.datetime.fromisoformat(orderbook['datetime']),
-                        created_at = orderbook['timestamp'])
-                    )
-            await conn.close()
-        
+            async with engine() as session:
+                async with session.begin():
+                    await session.execute(
+                        table_orderbook.insert().values(
+                            exchange = name,
+                            symbol = orderbook['symbol'],
+                            asks = orderbook['asks'],
+                            bids = orderbook['bids'],
+                            nonce = orderbook['nonce'],
+                            datetime = datetime.datetime.fromisoformat(orderbook['datetime']),
+                            created_at = orderbook['timestamp']))
         except Exception as e:
             print(str(e))
             raise e
@@ -103,28 +103,25 @@ async def watch_trades(exchange, symbol, engine):
         try:
             trades = await exchange.watch_trades(symbol)
             
-            conn = await engine.connect()
-            for trade in trades:
-                async with conn.begin():
-                    await conn.execute(
-                        table_trades.insert().values(
-                            exchange = name,
-                            symbol = symbol,
-                            trade_id = trade['id'],
-                            order_id = trade['order'],
-                            order_type = trade['type'],
-                            trade_side = trade['side'],
-                            taker_maker = trade['takerOrMaker'],
-                            executed_price = trade['price'],
-                            base_amount = trade['amount'],
-                            cost = trade['cost'],
-                            fee = trade['fee'],
-                            fees = trade['fees'] if trade['fees'] else None,
-                            datetime = datetime.datetime.fromisoformat(trade['datetime']),
-                            created_at = trade['timestamp'])
-                    )
-            await conn.close()
-                    
+            async with engine() as session:
+                async with session.begin():
+                    for trade in trades:
+                        await session.execute(
+                            table_trades.insert().values(
+                                exchange = name,
+                                symbol = symbol,
+                                trade_id = trade['id'],
+                                order_id = trade['order'],
+                                order_type = trade['type'],
+                                trade_side = trade['side'],
+                                taker_maker = trade['takerOrMaker'],
+                                executed_price = trade['price'],
+                                base_amount = trade['amount'],
+                                cost = trade['cost'],
+                                fee = trade['fee'],
+                                fees = trade['fees'] if trade['fees'] else None,
+                                datetime = datetime.datetime.fromisoformat(trade['datetime']),
+                                created_at = trade['timestamp']))                    
         except Exception as e:
             print(str(e))
             raise e
@@ -145,31 +142,29 @@ async def watch_ohlcv(exchange, symbol, timeframe, candle_limit, engine):
     while True:
         try:
             candle = await exchange.watch_ohlcv(symbol, timeframe, None, candle_limit)
-            conn = await engine.connect()
             
-            if last_candle is None:
-                last_candle = candle
-            
-            #if timestamps are not equal
-            if last_candle[0][0] != candle[0][0]:
-                datetime_str = exchange.iso8601(last_candle[0][0])
-                datetime_obj = datetime.datetime.strptime(datetime_str, '%Y-%m-%dT%H:%M:%S.%fZ')
-
-                async with conn.begin():
-                    await conn.execute(
-                        table_ohlcv.insert().values(
-                            exchange = name,
-                            symbol = symbol,
-                            open_price = last_candle[0][1],
-                            high_price = last_candle[0][2],
-                            low_price = last_candle[0][3],
-                            close_price = last_candle[0][4],
-                            candle_volume = last_candle[0][5],
-                            created_at = last_candle[0][0],
-                            datetime = datetime.datetime.utcfromtimestamp(last_candle[0][0]/1000))
-                        )
-            await conn.close()
-            last_candle = candle
+            async with engine() as session:
+                async with session.begin():
+                    if last_candle is None:
+                        last_candle = candle
+                    
+                    #if timestamps are not equal
+                    if last_candle[0][0] != candle[0][0]:
+                        datetime_str = exchange.iso8601(last_candle[0][0])
+                        datetime_obj = datetime.datetime.strptime(datetime_str, '%Y-%m-%dT%H:%M:%S.%fZ')
+        
+                        await session.execute(
+                            table_ohlcv.insert().values(
+                                exchange = name,
+                                symbol = symbol,
+                                open_price = last_candle[0][1],
+                                high_price = last_candle[0][2],
+                                low_price = last_candle[0][3],
+                                close_price = last_candle[0][4],
+                                candle_volume = last_candle[0][5],
+                                created_at = last_candle[0][0],
+                                datetime = datetime.datetime.utcfromtimestamp(last_candle[0][0]/1000)))
+                    last_candle = candle
 
         except Exception as e:
             print(str(e))
@@ -189,34 +184,31 @@ async def watch_ticker(exchange, symbol, engine):
         try:
             ticker = await exchange.watch_ticker(symbol)
             
-            conn = await engine.connect()
-            async with conn.begin():
-                await conn.execute(
-                    table_ticker.insert().values(
-                        exchange = name,
-                        symbol = symbol,
-                        ask = ticker['ask'],
-                        ask_volume = ticker['askVolume'],
-                        bid = ticker['bid'],
-                        bid_volume = ticker['bidVolume'],
-                        open_24h = ticker['open'],
-                        high_24h = ticker['high'],
-                        low_24h = ticker['low'],
-                        close_24h = ticker['close'],
-                        last_price = ticker['last'],
-                        vwap = ticker['vwap'],
-                        previous_close_price = ticker['previousClose'],
-                        price_change = ticker['change'],
-                        percentage_change = ticker['percentage'],
-                        average_price = ticker['average'],
-                        base_volume = ticker['baseVolume'],
-                        quote_volume = ticker['quoteVolume'],
-                        info = ticker['info'],
-                        datetime = datetime.datetime.fromisoformat(ticker['datetime']),
-                        created_at = ticker['timestamp'])
-                    )
-            await conn.close()
-            
+            async with engine() as session:
+                async with session.begin():
+                    await session.execute(
+                        table_ticker.insert().values(
+                            exchange = name,
+                            symbol = symbol,
+                            ask = ticker['ask'],
+                            ask_volume = ticker['askVolume'],
+                            bid = ticker['bid'],
+                            bid_volume = ticker['bidVolume'],
+                            open_24h = ticker['open'],
+                            high_24h = ticker['high'],
+                            low_24h = ticker['low'],
+                            close_24h = ticker['close'],
+                            last_price = ticker['last'],
+                            vwap = ticker['vwap'],
+                            previous_close_price = ticker['previousClose'],
+                            price_change = ticker['change'],
+                            percentage_change = ticker['percentage'],
+                            average_price = ticker['average'],
+                            base_volume = ticker['baseVolume'],
+                            quote_volume = ticker['quoteVolume'],
+                            info = ticker['info'],
+                            datetime = datetime.datetime.fromisoformat(ticker['datetime']),
+                            created_at = ticker['timestamp']))            
         except Exception as e:
             print(str(e))
             raise e
@@ -230,9 +222,14 @@ async def main():
         await conn.execute(text(f"CREATE DATABASE IF NOT EXISTS {db_name}"))
     await temp_engine.dispose()
     
-    # Create engine
+    # Connect to database
     engine_url = f'{temp_url}{db_name}'
-    engine = create_async_engine(engine_url, echo=True)    
+    engine = create_async_engine(engine_url, echo=True)
+    
+    # Create async session
+    async_session = sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
+    
+    # Create tables
     async with engine.begin() as conn:
         await conn.run_sync(meta.create_all)
     
@@ -243,7 +240,7 @@ async def main():
     symbol = btc_inverse_perp
     
     try:
-        await watch_market_data(exchange, symbol, engine, timeframe, candle_limit, orderbook_depth)
+        await watch_market_data(exchange, symbol, async_session, timeframe, candle_limit, orderbook_depth)
     finally:
         await exchange.close()
         
