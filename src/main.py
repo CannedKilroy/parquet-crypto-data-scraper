@@ -8,6 +8,8 @@ import pprint
 import sys
 import datetime
 import configparser
+from asyncio import gather
+
 
 from storage import meta, table_ohlcv, table_orderbook, table_trades, table_ticker, table_logs
 from sqlalchemy.ext.asyncio import create_async_engine
@@ -17,26 +19,25 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 
 from sqlalchemy.orm import sessionmaker
 
-
 print('Python version: ', sys.version_info)
 if sys.version_info < (3,7):
     print("This script requires Python 3.7 or higher.")
     sys.exit(1)
 print('CCXT version', ccxt.pro.__version__)
 
-# config_settings = read_config('config.ini')
-
 # Read settings from config file
 config = configparser.ConfigParser()
-config.read('config.ini')
+config.read('../config/config.ini')
 
-# Read symbols
-symbols = config['symbols']['symbols'].split(', ') # ####
-btc_inverse_perp = config['symbols']['btc_inverse_perp']
-btc_linear_perp = config['symbols']['btc_linear_perp']
+# Directly access symbols for 'binance' and 'bybit'
+binance_symbols = config['binance']['symbols'].split(', ')
+bybit_symbols = config['bybit']['symbols'].split(', ')
 
-# Read exchanges
-exchanges = config['exchanges']['exchanges'].split(', ') # ####
+# Construct the dictionary
+exchanges_and_symbols = {
+    'binance': binance_symbols,
+    'bybit': bybit_symbols
+}
 
 # Read stream settings
 timeframe = config['settings']['timeframe']
@@ -50,22 +51,6 @@ password = config['credentials']['password']
 host = config['credentials']['host']
 port = config['credentials']['port']
 db_name = config['credentials']['dbname']
-
-async def watch_market_data(exchange, symbol, engine, timeframe, candle_limit, orderbook_depth):
-    loops = []
-    if exchange.has["watchOHLCV"]:
-        loops.append(
-            watch_ohlcv(exchange, symbol, timeframe, candle_limit, engine))
-    if exchange.has["watchTicker"]:
-        loops.append(
-            watch_ticker(exchange, symbol, engine))
-    if exchange.has["watchTrades"]:
-        loops.append(
-            watch_trades(exchange, symbol, engine))
-    if exchange.has["watchOrderBook"]:
-        loops.append(
-            watch_order_book(exchange, symbol, orderbook_depth, engine))
-    await asyncio.gather(*loops)
 
 async def exchange_exists(exchange_name):
     pass
@@ -225,8 +210,31 @@ async def watch_ticker(exchange, symbol, engine):
         except Exception as e:
             print(str(e))
             raise e
+        
+async def watch_market_data(exchange, symbol, engine, timeframe, candle_limit, orderbook_depth):
+    loops = []
+    if exchange.has["watchOHLCV"]:
+        loops.append(
+            watch_ohlcv(exchange, symbol, timeframe, candle_limit, engine))
+    if exchange.has["watchTicker"]:
+        loops.append(
+            watch_ticker(exchange, symbol, engine))
+    if exchange.has["watchTrades"]:
+        loops.append(
+            watch_trades(exchange, symbol, engine))
+    if exchange.has["watchOrderBook"]:
+        loops.append(
+            watch_order_book(exchange, symbol, orderbook_depth, engine))
+    await asyncio.gather(*loops)
 
-async def main():
+async def exchange_loop(exchange_id, exchange, symbols, engine, timeframe, candle_limit, orderbook_depth):
+    print(f"Processing {exchange_id} with symbols {symbols}")
+    await gather(*[watch_market_data(exchange, symbol, engine, timeframe, candle_limit, orderbook_depth) for symbol in symbols])
+    await exchange.close()
+
+async def database_setup():
+    print('#'*20)
+    print('Setting up database')
     
     # Create temporary engine to create database    
     temp_url = f'mysql+aiomysql://{username}:{password}@{host}:{port}/'
@@ -239,59 +247,54 @@ async def main():
     engine_url = f'{temp_url}{db_name}'
     engine = create_async_engine(engine_url, echo=True)
     
-    # Create async session
+    # Create async db session
     async_session = sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
     
     # Create tables
     async with engine.begin() as conn:
         await conn.run_sync(meta.create_all)
     
-    # Instantiate exchanges
-    # Loop through list of id's and place objects in dict
-    valid_exchanges = {}    
-    for exchange_id in exchanges:
+    print('Database setup finished')
+    print('#'*20)    
+    return engine, async_session
+
+async def initialize_exchanges(exchange_names):
+    # Instantiate exchanges and place in dict
+    valid_exchanges = {}
+    for exchange_name in exchange_names:
         try:
-            exchange_class = getattr(ccxt, exchange_id)
-            exchange = exchange_class({'newUpdates':True,
-                                       'enableRateLimit': True,
-                                       'verbose':True})
-            valid_exchanges[exchange_id] = exchange
-        except:
-            print('Not valid exchange')
+            exchange_class = getattr(ccxt.pro, exchange_name)            
+            exchange = exchange_class({'enableRateLimit': True, 
+                                       'async_support': True,
+                                       'newUpdates': True,
+                                       'verbose': True})
+            valid_exchanges[exchange_name] = exchange
+        except AttributeError:
+            print(f"Exchange {exchange_name} is not supported by ccxt.pro")
+        except Exception as e:
+            print(f"An error occurred while initializing {exchange_name}: {str(e)}")
+    return valid_exchanges
+
+async def main():    
+    # Setup Database
+    engine, async_session = await database_setup()
+    
+    # Initialize exchanges
+    valid_exchanges = await initialize_exchanges(list(exchanges_and_symbols.keys()))    
+    
+    # Load markets
+    for exchange_id, exchange in valid_exchanges.items():
+        print(f"Loading markets for {exchange_id}")
+        try:
+            markets = await exchange.load_markets()
+            # Further processing, e.g., loop through symbols in markets
+            print(f"Markets loaded for {exchange_id}")
+        except Exception as e:
+            print(f"Error loading markets for {exchange_id}: {str(e)}")    
             
-    print(valid_exchanges)
-    #exchange = ccxt.pro.bybit({'newUpdates':True,'enableRateLimit': True, 'verbose':True})
-    exchange = valid_exchanges['bybit']
-    print(exchange)
-    print(type(exchange))
-    symbol = btc_inverse_perp
-    '''
-    for key,value in valid_exchanges.items():
-        await value.load_markets()
-        
-        try:
-            await watch_market_data(exchange, symbol, async_session, timeframe, candle_limit, orderbook_depth)
-        except ccxt.NetworkError as network_error:
-            print('Network Error')
-            print('Retrying...')
-        except ccxt.ExchangeError as exchange_error:
-            print('sdfs')
-        finally:
-            await exchange.close()        
-    '''
-    
-    await exchange.load_markets()
-    
-    try:
-        await watch_market_data(exchange, symbol, async_session, timeframe, candle_limit, orderbook_depth)
-    except ccxt.NetworkError as network_error:
-        print('Network Error')
-        print('Retrying...')
-    except ccxt.ExchangeError as exchange_error:
-        print('sdfs')
-    finally:
-        await exchange.close()
-    
+    # Run loops for each exchange and its symbols
+    loops = [exchange_loop(exchange_id, valid_exchanges[exchange_id], exchanges_and_symbols[exchange_id], async_session, timeframe, candle_limit, orderbook_depth) for exchange_id in exchanges_and_symbols]
+    await gather(*loops, return_exceptions=True)
         
 if __name__ == "__main__":
     asyncio.run(main())
