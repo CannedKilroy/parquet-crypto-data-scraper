@@ -1,19 +1,26 @@
 ![Alt Text](https://github.com/CannedKilroy/crypto/blob/main/Assets/ccxt_resize.png)
 # Cryptocurrency Futures Data Capture Tool
 
-Python script that captures and stores realtime cryptocurrency websocket data asynchronously, using the ccxt library and sqlalchemy with MySQL. Compatible with ccxt supported exchange and symbols. After exchange connection is made and tables created, websocket streams including OHLCV, ticker, trades, and orderbook data are checked for uniquness and then inserted into a their own table.
+A python-based data pipeline that uses the CCXT and SQLAlchemy libraries to asynchronously capture and store real-time cryptocurrency exchange data from WebSocket feeds into a MySQL database. Designed to support multiple exchanges and tickers simultaneously, this tool is compatible with all CCXT-supported exchanges. 
+
+After creating the database and tables, it connects to the exchanges, loads market data, and then captures the streams:
+- OHLCV
+- ticker information
+- time and sales (recent trades)
+- order book
 
 ## Dependencies
 - Python 3.7 <=
 - SQLalchemy
 - MySQL
+- CCXT
 
 ## Setup
 - Clone repo to local machine
   - `git clone https://github.com/CannedKilroy/crypto.git`
 - Install dependencies
   - `pip install -r requirements.txt`
-- Edit config.ini database credentials 
+- Edit `config` file inside `config/` for database credentials and other settings
 
 ## Usage
 - Run main.py
@@ -26,6 +33,9 @@ The inverse bitcoin futures contract on bybit generates approximatly 15-25 gigab
 Adding more exchanges / symbols to watch would generate alot of data 
 
 ### TODO:
+- seperate out config reading
+- loops and checking for exchanges and symbols
+- logging
 - function that translates bybit symbol to ccxt symbol
 - switch to time series database to handle more data
 - expand config file to handle multiple exchanges and symbols, ohlcv timeframe, orderbook depth, timeout
