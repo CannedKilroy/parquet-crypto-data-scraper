@@ -1,4 +1,3 @@
-#main.py
 import ccxt.pro
 import asyncio
 import logging
@@ -8,6 +7,7 @@ import pprint
 import sys
 import datetime
 import configparser
+import yaml
 from asyncio import gather
 
 
@@ -25,33 +25,13 @@ if sys.version_info < (3,7):
     sys.exit(1)
 print('CCXT version', ccxt.pro.__version__)
 
-# Read settings from config file
-config = configparser.ConfigParser()
-config.read('../config/config.ini')
+# ###############################################################
 
-# Directly access symbols for 'binance' and 'bybit'
-binance_symbols = config['binance']['symbols'].split(', ')
-bybit_symbols = config['bybit']['symbols'].split(', ')
 
-# Construct the dictionary
-exchanges_and_symbols = {
-    'binance': binance_symbols,
-    'bybit': bybit_symbols
-}
-
-# Read stream settings
-timeframe = config['settings']['timeframe']
-orderbook_depth = int(config['settings']['orderbook_depth'])
-timeout = int(config['settings']['timeout'])
-candle_limit = int(config['settings']['candle_limit'])
-
-# Read database credentials
-username = config['credentials']['user']
-password = config['credentials']['password']
-host = config['credentials']['host']
-port = config['credentials']['port']
-db_name = config['credentials']['dbname']
-
+async def load_config(file_path):
+    with open(file_path, 'r') as file:
+        return yaml.safe_load(file)
+    
 async def exchange_exists(exchange_name):
     pass
 
@@ -232,12 +212,10 @@ async def exchange_loop(exchange_id, exchange, symbols, engine, timeframe, candl
     await gather(*[watch_market_data(exchange, symbol, engine, timeframe, candle_limit, orderbook_depth) for symbol in symbols])
     await exchange.close()
 
-async def database_setup():
-    print('#'*20)
-    print('Setting up database')
+async def database_setup(user, password, host, port, db_name):
     
     # Create temporary engine to create database    
-    temp_url = f'mysql+aiomysql://{username}:{password}@{host}:{port}/'
+    temp_url = f'mysql+aiomysql://{user}:{password}@{host}:{port}/'
     temp_engine = create_async_engine(temp_url, echo=True)
     async with temp_engine.begin() as conn:
         await conn.execute(text(f"CREATE DATABASE IF NOT EXISTS {db_name}"))
@@ -253,13 +231,11 @@ async def database_setup():
     # Create tables
     async with engine.begin() as conn:
         await conn.run_sync(meta.create_all)
-    
-    print('Database setup finished')
-    print('#'*20)    
-    return engine, async_session
+
+    return async_session
 
 async def initialize_exchanges(exchange_names):
-    # Instantiate exchanges and place in dict
+    # Check exchanges and instantiate exchange objects and place in dict
     valid_exchanges = {}
     for exchange_name in exchange_names:
         try:
@@ -267,7 +243,7 @@ async def initialize_exchanges(exchange_names):
             exchange = exchange_class({'enableRateLimit': True, 
                                        'async_support': True,
                                        'newUpdates': True,
-                                       'verbose': True})
+                                       'verbose': False})
             valid_exchanges[exchange_name] = exchange
         except AttributeError:
             print(f"Exchange {exchange_name} is not supported by ccxt.pro")
@@ -275,26 +251,41 @@ async def initialize_exchanges(exchange_names):
             print(f"An error occurred while initializing {exchange_name}: {str(e)}")
     return valid_exchanges
 
-async def main():    
-    # Setup Database
-    engine, async_session = await database_setup()
+async def main():
     
-    # Initialize exchanges
-    valid_exchanges = await initialize_exchanges(list(exchanges_and_symbols.keys()))    
+    # Read config file
+    config = await load_config('../config/config.yaml')
+    
+    # Initialize database
+    async_session = await database_setup(user = config['credentials']['user'],
+                                                 password = config['credentials']['password'],
+                                                 host = config['credentials']['host'],
+                                                 port = config['credentials']['port'],
+                                                 db_name = config['credentials']['db_name'])
+    # Initialize exchange 
+    exchange_objects = await initialize_exchanges(exchange_names = config['exchanges'].keys())
     
     # Load markets
-    for exchange_id, exchange in valid_exchanges.items():
-        print(f"Loading markets for {exchange_id}")
+    for exchange_id, exchange in exchange_objects.items():
         try:
             markets = await exchange.load_markets()
-            # Further processing, e.g., loop through symbols in markets
             print(f"Markets loaded for {exchange_id}")
         except Exception as e:
-            print(f"Error loading markets for {exchange_id}: {str(e)}")    
-            
+            print(f"Error loading markets for {exchange_id}: {str(e)}")
+    
+
     # Run loops for each exchange and its symbols
-    loops = [exchange_loop(exchange_id, valid_exchanges[exchange_id], exchanges_and_symbols[exchange_id], async_session, timeframe, candle_limit, orderbook_depth) for exchange_id in exchanges_and_symbols]
-    await gather(*loops, return_exceptions=True)
+    loops = [exchange_loop(
+        exchange_id, 
+        exchange_objects[exchange_id], 
+        config['exchanges'][exchange_id]['symbols'], 
+        async_session, 
+        config['settings']['timeframe'], 
+        config['settings']['candle_limit'], 
+        config['settings']['orderbook_depth']) 
+             for exchange_id in config['exchanges']]
+    
+    await gather(*loops, return_exceptions=False)
         
 if __name__ == "__main__":
     asyncio.run(main())

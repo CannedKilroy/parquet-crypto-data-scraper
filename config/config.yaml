@@ -1,0 +1,21 @@
+exchanges:
+  binance:
+    symbols:
+      - BTC/USD:BTC
+      - BTC/USDT:USDT
+  bybit:
+    symbols:
+      - BTC/USD:BTC
+
+settings:
+  timeframe: 1m
+  orderbook_depth: 50
+  timeout: 10
+  candle_limit: 1
+
+credentials:
+  user: root
+  password: root
+  host: localhost
+  port: 3306
+  db_name: test_yaml
