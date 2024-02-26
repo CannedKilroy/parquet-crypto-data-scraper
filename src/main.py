@@ -9,6 +9,7 @@ import datetime
 import configparser
 import yaml
 from asyncio import gather
+from typing import List, Any, Callable
 
 
 from storage import meta, table_ohlcv, table_orderbook, table_trades, table_ticker, table_logs
@@ -24,26 +25,28 @@ if sys.version_info < (3,7):
     print("This script requires Python 3.7 or higher.")
     sys.exit(1)
 print('CCXT version', ccxt.pro.__version__)
-
-# ###############################################################
-
+    
+async def exchange_exists(exchange_name):
+    pass
 
 async def load_config(file_path):
     with open(file_path, 'r') as file:
         return yaml.safe_load(file)
     
-async def exchange_exists(exchange_name):
-    pass
-
-async def watch_order_book(exchange, symbol, orderbook_depth, engine):
+async def watch_order_book(exchange: ccxt.pro.Exchange,
+                           symbol: str,
+                           orderbook_depth: int,
+                           session_factory: Callable[[], AsyncSession]) -> None:
     '''
-    Watch the order book for a specific symbol.
-    Orderbook is unique from api, updates on deltas
+    Continously watch the orderbook for a 
+    specific symbol / exchange pair
+    and update its table with the new realtime info. 
     
     :param exchange: The exchange object
-    :param symbol: The trading symbol
-    :param orderbook_depth: The depth of the order book
-    :param engine: SQLalchemy engine
+    :param symbol: The specific trading symbol to watch
+    :param orderbook_depth: The orderbook depth
+    :param session_factory: Generates AsyncSession for database
+           operations.
     '''
     name = getattr(exchange, 'name')
     
@@ -51,7 +54,7 @@ async def watch_order_book(exchange, symbol, orderbook_depth, engine):
         try:
             orderbook = await exchange.watch_order_book(symbol, orderbook_depth)
 
-            async with engine() as session:
+            async with session_factory() as session:
                 async with session.begin():
                     await session.execute(
                         table_orderbook.insert().values(
@@ -66,14 +69,17 @@ async def watch_order_book(exchange, symbol, orderbook_depth, engine):
             print(str(e))
             raise e
     
-async def watch_trades(exchange, symbol, engine):
+async def watch_trades(exchange: ccxt.pro.Exchange,
+                       symbol: str,
+                       session_factory: Callable[[], AsyncSession]) -> None:
     '''
-    Watch the trades for a specific symbol.
-    Trades are unique from the api
+    Continously watch the trades for a specific symbol / exchange pair
+    and update its table with the new realtime info. 
     
     :param exchange: The exchange object
-    :param symbol: The trading symbol
-    :param engine: SQLalchemy engine
+    :param symbol: The specific trading symbol to watch
+    :param session_factory: Generates AsyncSession for database
+           operations.
     '''
     name = getattr(exchange, 'name')
     
@@ -81,7 +87,7 @@ async def watch_trades(exchange, symbol, engine):
         try:
             trades = await exchange.watch_trades(symbol)
             
-            async with engine() as session:
+            async with session_factory() as session:
                 async with session.begin():
                     for trade in trades:
                         await session.execute(
@@ -104,15 +110,23 @@ async def watch_trades(exchange, symbol, engine):
             print(str(e))
             raise e
 
-async def watch_ohlcv(exchange, symbol, timeframe, candle_limit, engine):
+async def watch_ohlcv(exchange: ccxt.pro.Exchange,
+                      symbol: str, 
+                      timeframe: str,
+                      candle_limit: int,
+                      session_factory: Callable[[], AsyncSession]) -> None:
     '''
-    Watch the OHLCV data for a specific symbol.
-
+    Continously watch the ticker for a specific symbol / exchange pair
+    and update its table with the new realtime info. 
+    OHLCV stream does not push unique / only new data,
+    so it is cached and checked. 
+    
     :param exchange: The exchange object
-    :param symbol: The trading symbol
+    :param symbol: The specific trading symbol to watch
     :param timeframe: The timeframe for the OHLCV data
     :param candle_limit: The number of candles to fetch
-    :param engine: SQLalchemy engine
+    :param session_factory: Generates AsyncSession for database
+           operations.
     '''
     last_candle = None
     name = getattr(exchange, 'name')
@@ -121,7 +135,7 @@ async def watch_ohlcv(exchange, symbol, timeframe, candle_limit, engine):
         try:
             candle = await exchange.watch_ohlcv(symbol, timeframe, None, candle_limit)
             
-            async with engine() as session:
+            async with session_factory() as session:
                 async with session.begin():
                     if last_candle is None:
                         last_candle = candle
@@ -148,13 +162,17 @@ async def watch_ohlcv(exchange, symbol, timeframe, candle_limit, engine):
             print(str(e))
             raise e
             
-async def watch_ticker(exchange, symbol, engine):
+async def watch_ticker(exchange: ccxt.pro.Exchange,
+                       symbol: str,
+                       session_factory: Callable[[],AsyncSession]) -> None:
     '''
-    Watch the ticker of an exchange for a specific symbol.
+    Continously watch the ticker for a specific symbol / exchange pair
+    and update its table with the new realtime info. 
 
     :param exchange: The exchange object
-    :param symbol: The trading symbol
-    :param engine: SQLalchemy engine
+    :param symbol: The specific trading symbol to watch
+    :param session_factory: Generates AsyncSession for database
+    operations.
     '''
     name = getattr(exchange, 'name')
     
@@ -162,7 +180,7 @@ async def watch_ticker(exchange, symbol, engine):
         try:
             ticker = await exchange.watch_ticker(symbol)
             
-            async with engine() as session:
+            async with session_factory() as session:
                 async with session.begin():
                     await session.execute(
                         table_ticker.insert().values(
@@ -191,28 +209,76 @@ async def watch_ticker(exchange, symbol, engine):
             print(str(e))
             raise e
         
-async def watch_market_data(exchange, symbol, engine, timeframe, candle_limit, orderbook_depth):
+async def watch_market_data(exchange: ccxt.pro.Exchange,
+                            symbol: str,
+                            session_factory: Callable[[], AsyncSession],
+                            timeframe: str,
+                            candle_limit: int,
+                            orderbook_depth: int) -> None:
+    '''
+    Watch websocket streams for a specific symbol / exchange pair.
+    Starts concurrent tasks for streaming OHLCV, ticker updates,
+    trades, and order book snapshots. Each stream is fetched 
+    and inserted asynchronously. 
+    
+    :param exchange: The exchange object to watch the market data on.
+    :param symbol: The trading symbol to watch.
+    :param session_factory: Generates AsyncSession for database operations.
+    :param timeframe: The timeframe for the OHLCV data.
+    :param candle_limit: The number of candles to fetch for OHLCV data.
+    :param orderbook_depth: The depth of the order book to maintain.
+    '''
+    
     loops = []
     if exchange.has["watchOHLCV"]:
         loops.append(
-            watch_ohlcv(exchange, symbol, timeframe, candle_limit, engine))
+            watch_ohlcv(exchange, symbol, timeframe, candle_limit, session_factory))
     if exchange.has["watchTicker"]:
         loops.append(
-            watch_ticker(exchange, symbol, engine))
+            watch_ticker(exchange, symbol, session_factory))
     if exchange.has["watchTrades"]:
         loops.append(
-            watch_trades(exchange, symbol, engine))
+            watch_trades(exchange, symbol, session_factory))
     if exchange.has["watchOrderBook"]:
         loops.append(
-            watch_order_book(exchange, symbol, orderbook_depth, engine))
+            watch_order_book(exchange, symbol, orderbook_depth, session_factory))
     await asyncio.gather(*loops)
 
-async def exchange_loop(exchange_id, exchange, symbols, engine, timeframe, candle_limit, orderbook_depth):
-    print(f"Processing {exchange_id} with symbols {symbols}")
-    await gather(*[watch_market_data(exchange, symbol, engine, timeframe, candle_limit, orderbook_depth) for symbol in symbols])
-    await exchange.close()
+async def exchange_loop(exchange_id: str,
+                        exchange: ccxt.pro.Exchange,
+                        symbols: List[str],
+                        session_factory: Callable[[], AsyncSession],
+                        timeframe: str,
+                        candle_limit: int,
+                        orderbook_depth: int) -> None:
+    '''
+    Remove. Call watch_market_data directly
+    Exchanges do not need to be closed 
+    '''
 
-async def database_setup(user, password, host, port, db_name):
+    print(f"Processing {exchange_id} with symbols {symbols}")
+    
+    await gather(*[watch_market_data(exchange, symbol, session_factory, timeframe, candle_limit, orderbook_depth) for symbol in symbols])
+    #await exchange.close()
+
+async def database_setup(user:str,
+                         password:str,
+                         host:str,
+                         port:int,
+                         db_name:str) -> sessionmaker:
+    '''
+    Creates a database if it doesn't exists using a temporary engine,
+    connects to the database and creates an asynchronous session.
+    Tables are created and asynchronous session factory is returned. 
+    Expire on commit set to false for efficency. 
+
+    :param user: The database username.
+    :param password: The database password.
+    :param host: The host.
+    :param port: The database port number.
+    :param db_name: Name of the database to be created / connected to.
+    :return: An asynchronous session factory for performing database operations.
+    '''
     
     # Create temporary engine to create database    
     temp_url = f'mysql+aiomysql://{user}:{password}@{host}:{port}/'
@@ -225,17 +291,30 @@ async def database_setup(user, password, host, port, db_name):
     engine_url = f'{temp_url}{db_name}'
     engine = create_async_engine(engine_url, echo=True)
     
-    # Create async db session
-    async_session = sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
+    # Create async db session factory
+    async_session_factory = sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
     
     # Create tables
     async with engine.begin() as conn:
         await conn.run_sync(meta.create_all)
 
-    return async_session
+    return async_session_factory
 
-async def initialize_exchanges(exchange_names):
-    # Check exchanges and instantiate exchange objects and place in dict
+async def initialize_exchanges(exchange_names: list[str]) -> dict[str, ccxt.pro.Exchange]:
+    '''
+    Initializes and returns a dictionary of CCXT Pro 
+    exchange objects for each exchange name provided.
+    Only exchanges supported by CCXT Pro are initialized. 
+    Unsupported exchanges throw an exception and are skipped.
+    Each exchange object is configured with rate limit enabled,
+    asynchronous support, new updates, and verbosity.
+
+    :param exchange_names: A list of exchange names (str) to be initialized.
+    :return: A dictionary where keys are exchange names
+             (str) and values are corresponding ccxt.pro.Exchange objects.
+             Only successfully initialized exchanges are included.
+    '''
+    
     valid_exchanges = {}
     for exchange_name in exchange_names:
         try:
@@ -243,21 +322,22 @@ async def initialize_exchanges(exchange_names):
             exchange = exchange_class({'enableRateLimit': True, 
                                        'async_support': True,
                                        'newUpdates': True,
-                                       'verbose': False})
+                                       'verbose': True})
             valid_exchanges[exchange_name] = exchange
         except AttributeError:
             print(f"Exchange {exchange_name} is not supported by ccxt.pro")
         except Exception as e:
             print(f"An error occurred while initializing {exchange_name}: {str(e)}")
+
     return valid_exchanges
 
 async def main():
-    
+
     # Read config file
     config = await load_config('../config/config.yaml')
     
-    # Initialize database
-    async_session = await database_setup(user = config['credentials']['user'],
+    # Initialize database and get 
+    async_session_factory = await database_setup(user = config['credentials']['user'],
                                                  password = config['credentials']['password'],
                                                  host = config['credentials']['host'],
                                                  port = config['credentials']['port'],
@@ -276,18 +356,16 @@ async def main():
 
     # Run loops for each exchange and its symbols
     loops = [exchange_loop(
-        exchange_id, 
-        exchange_objects[exchange_id], 
-        config['exchanges'][exchange_id]['symbols'], 
-        async_session, 
-        config['settings']['timeframe'], 
-        config['settings']['candle_limit'], 
-        config['settings']['orderbook_depth']) 
+        exchange_id = exchange_id, 
+        exchange = exchange_objects[exchange_id], 
+        symbols = config['exchanges'][exchange_id]['symbols'], 
+        session_factory = async_session_factory, 
+        timeframe = config['settings']['timeframe'], 
+        candle_limit = config['settings']['candle_limit'], 
+        orderbook_depth = config['settings']['orderbook_depth']) 
              for exchange_id in config['exchanges']]
     
     await gather(*loops, return_exceptions=False)
         
 if __name__ == "__main__":
     asyncio.run(main())
-    
-# https://github.com/ccxt/ccxt/blob/master/examples/py/async-fetch-order-book-from-many-exchanges.py
