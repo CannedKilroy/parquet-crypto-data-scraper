@@ -89,6 +89,12 @@ table_logs = Table(
     'logs',
     meta,
     Column('id', Integer, primary_key = True),
+    Column('exchange', String(32)),
+    Column('symbol', String(32)),
+    
+    Column('error_type', String(64)),
     Column('message', String(512)),
+    Column('stream', String(32)),
+    
     Column('created_at', BigInteger, index = True)
     )

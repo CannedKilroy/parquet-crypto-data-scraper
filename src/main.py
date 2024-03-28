@@ -23,6 +23,56 @@ async def exchange_exists(exchange_name):
     pass
 
 
+class LogRateLimiter:
+    '''
+    Log rate limiter that handles writing logs 
+    while preventing spamming the db. Local time is used to 
+    calculate the cooldown, but the websocket timestamp
+    is logged to keep time consistant between the logs 
+    and data tables.
+    '''
+    def __init__(self, cooldown_period_ms: int =5000) -> None:
+        
+        self.cooldown_period = cooldown_period_ms
+        self.last_log_time = None
+
+    async def write_logs(self,
+                         session_factory: Callable[[], AsyncSession],
+                         exchange:str,
+                         symbol:str,
+                         error_type:str,
+                         message:str,
+                         stream:str,
+                         created_at:int) -> None:
+        '''
+        Writes logs to the database with a cooldown period to prevent spamming.
+
+        :param session_factory: A callable that returns an AsyncSession object for database operations.
+        :param exchange: The name of the cryptocurrency exchange.
+        :param symbol: The trading symbol (e.g., BTC/USD).
+        :param error_type: The type of error being logged.
+        :param message: The error message.
+        :param stream: The data stream from which the error originated.
+        :param created_at: The timestamp (in milliseconds) when the log entry was created.
+        '''    
+        now_ms = int(datetime.datetime.utcnow().timestamp() * 1000)  # Current time in milliseconds
+        
+        if self.last_log_time is None or (now_ms - self.last_log_time) >= self.cooldown_period:
+            async with session_factory() as session:
+                async with session.begin():
+                    await session.execute(
+                        table_logs.insert().values(
+                            exchange=exchange,
+                            symbol=symbol,
+                            message=message,
+                            stream=stream,
+                            error_type=error_type,
+                            created_at=created_at  
+                        ))
+            self.last_log_time = now_ms
+            print('Error is logged')
+
+
 async def load_config(file_path):
     with open(file_path, 'r') as file:
         return yaml.safe_load(file)
@@ -31,7 +81,8 @@ async def load_config(file_path):
 async def watch_order_book(exchange: ccxt.pro.Exchange,
                            symbol: str,
                            orderbook_depth: int,
-                           session_factory: Callable[[], AsyncSession]) -> None:
+                           session_factory: Callable[[], AsyncSession],
+                           log_rate_limiter: LogRateLimiter) -> None:
     '''
     Continously watch the orderbook for a
     specific symbol / exchange pair
@@ -44,9 +95,12 @@ async def watch_order_book(exchange: ccxt.pro.Exchange,
            operations.
     '''
     name = getattr(exchange, 'name')
-
+    orderbook = None
+    
     while True:
         try:
+            
+            #expriment
             orderbook = await exchange.watch_order_book(symbol, orderbook_depth)
 
             async with session_factory() as session:
@@ -61,14 +115,28 @@ async def watch_order_book(exchange: ccxt.pro.Exchange,
                             datetime=datetime.datetime.fromisoformat(
                                 orderbook['datetime']),
                             created_at=orderbook['timestamp']))
+
         except Exception as e:
-            print(str(e))
-            raise e
+            error_type = e.__class__.__name__
+            message = str(e)
+            
+            created_at = int(datetime.datetime.utcnow().timestamp()*1000)
+            print('Type: ', error_type)
+            print('Error: ', e)
+
+            await log_rate_limiter.write_logs(session_factory=session_factory,
+                                              exchange=exchange.name,
+                                              symbol=symbol,
+                                              error_type=error_type,
+                                              message=message,
+                                              stream="watch_order_book",
+                                              created_at=created_at)
 
 
 async def watch_trades(exchange: ccxt.pro.Exchange,
                        symbol: str,
-                       session_factory: Callable[[], AsyncSession]) -> None:
+                       session_factory: Callable[[], AsyncSession],
+                       log_rate_limiter: LogRateLimiter) -> None:
     '''
     Continously watch the trades for a specific symbol / exchange pair
     and update its table with the new realtime info.
@@ -79,7 +147,7 @@ async def watch_trades(exchange: ccxt.pro.Exchange,
            operations.
     '''
     name = getattr(exchange, 'name')
-
+    trades = None
     while True:
         try:
             trades = await exchange.watch_trades(symbol)
@@ -105,15 +173,28 @@ async def watch_trades(exchange: ccxt.pro.Exchange,
                                     trade['datetime']),
                                 created_at=trade['timestamp']))
         except Exception as e:
-            print(str(e))
-            raise e
+            error_type = e.__class__.__name__
+            message = str(e)
+            
+            created_at = int(datetime.datetime.utcnow().timestamp()*1000)
+            print('Type: ', error_type)
+            print('Error: ', e)
+
+            await log_rate_limiter.write_logs(session_factory=session_factory,
+                                              exchange=exchange.name,
+                                              symbol=symbol,
+                                              error_type=error_type,
+                                              message=message,
+                                              stream="watch_trades",
+                                              created_at=created_at)
 
 
 async def watch_ohlcv(exchange: ccxt.pro.Exchange,
                       symbol: str,
                       timeframe: str,
                       candle_limit: int,
-                      session_factory: Callable[[], AsyncSession]) -> None:
+                      session_factory: Callable[[], AsyncSession],
+                      log_rate_limiter: LogRateLimiter) -> None:
     '''
     Continously watch the ticker for a specific symbol / exchange pair
     and update its table with the new realtime info.
@@ -128,6 +209,7 @@ async def watch_ohlcv(exchange: ccxt.pro.Exchange,
            operations.
     '''
     last_candle = None
+    candle = None
     name = getattr(exchange, 'name')
 
     while True:
@@ -156,13 +238,26 @@ async def watch_ohlcv(exchange: ccxt.pro.Exchange,
                                     last_candle[0][0]/1000)))
                     last_candle = candle
         except Exception as e:
-            print(str(e))
-            raise e
+            error_type = e.__class__.__name__
+            message = str(e)
+            
+            created_at = int(datetime.datetime.utcnow().timestamp()*1000)
+            print('Type: ', error_type)
+            print('Error: ', e)
+       
 
+            await log_rate_limiter.write_logs(session_factory=session_factory,
+                                              exchange=exchange.name,
+                                              symbol=symbol,
+                                              error_type=error_type,
+                                              message=message,
+                                              stream="watch_ohlcv",
+                                              created_at=created_at)
 
 async def watch_ticker(exchange: ccxt.pro.Exchange,
                        symbol: str,
-                       session_factory: Callable[[], AsyncSession]) -> None:
+                       session_factory: Callable[[], AsyncSession],
+                       log_rate_limiter: LogRateLimiter) -> None:
     '''
     Continously watch the ticker for a specific symbol / exchange pair
     and update its table with the new realtime info.
@@ -203,22 +298,36 @@ async def watch_ticker(exchange: ccxt.pro.Exchange,
                             info=ticker['info'],
                             datetime=datetime.datetime.fromisoformat(ticker['datetime']),
                             created_at=ticker['timestamp']))
-        except Exception as e:
-            print(str(e))
-            raise e
 
+        except Exception as e:
+            error_type = e.__class__.__name__
+            message = str(e)
+            
+            created_at = int(datetime.datetime.utcnow().timestamp()*1000)
+            print('Type: ', error_type)
+            print('Error: ', e)
+       
+
+            await log_rate_limiter.write_logs(session_factory=session_factory,
+                                              exchange=exchange.name,
+                                              symbol=symbol,
+                                              error_type=error_type,
+                                              message=message,
+                                              stream="watch_ticker",
+                                              created_at=created_at)            
 
 async def watch_market_data(exchange: ccxt.pro.Exchange,
                             symbol: str,
                             session_factory: Callable[[], AsyncSession],
                             timeframe: str,
                             candle_limit: int,
-                            orderbook_depth: int) -> None:
+                            orderbook_depth: int,
+                            log_rate_limiters: dict) -> None:
     '''
     Watch websocket streams for a specific symbol / exchange pair.
     Starts concurrent tasks for streaming OHLCV, ticker updates,
     trades, and order book snapshots. Each stream is fetched
-    and inserted asynchronously.
+    and inserted asynchronously. Each stream gets its own rate limiter.
 
     :param exchange: The exchange object to watch the market data on.
     :param symbol: The trading symbol to watch.
@@ -231,35 +340,18 @@ async def watch_market_data(exchange: ccxt.pro.Exchange,
     loops = []
     if exchange.has["watchOHLCV"]:
         loops.append(
-            watch_ohlcv(exchange, symbol, timeframe, candle_limit, session_factory))
+            watch_ohlcv(exchange, symbol, timeframe, candle_limit, session_factory, log_rate_limiters["ohlcv"]))
     if exchange.has["watchTicker"]:
         loops.append(
-            watch_ticker(exchange, symbol, session_factory))
+            watch_ticker(exchange, symbol, session_factory, log_rate_limiters["ticker"]))
     if exchange.has["watchTrades"]:
         loops.append(
-            watch_trades(exchange, symbol, session_factory))
+            watch_trades(exchange, symbol, session_factory, log_rate_limiters["trades"]))
     if exchange.has["watchOrderBook"]:
         loops.append(
-            watch_order_book(exchange, symbol, orderbook_depth, session_factory))
+            watch_order_book(exchange, symbol, orderbook_depth, session_factory, log_rate_limiters["order_book"]))
+
     await asyncio.gather(*loops)
-
-
-async def exchange_loop(exchange_id: str,
-                        exchange: ccxt.pro.Exchange,
-                        symbols: List[str],
-                        session_factory: Callable[[], AsyncSession],
-                        timeframe: str,
-                        candle_limit: int,
-                        orderbook_depth: int) -> None:
-    '''
-    Remove. Call watch_market_data directly
-    Exchanges do not need to be closed
-    '''
-
-    print(f"Processing {exchange_id} with symbols {symbols}")
-
-    await asyncio.gather(*[watch_market_data(exchange, symbol, session_factory, timeframe, candle_limit, orderbook_depth) for symbol in symbols])
-    #await exchange.close()
 
 
 async def database_setup(user: str,
@@ -272,6 +364,7 @@ async def database_setup(user: str,
     connects to the database and creates an asynchronous session.
     Tables are created and asynchronous session factory is returned.
     Expire on commit set to false for efficency.
+    Uses aiomysql connector.
 
     :param user: The database username.
     :param password: The database password.
@@ -337,11 +430,17 @@ async def initialize_exchanges(exchange_names: list[str]) -> dict[str, ccxt.pro.
 
 
 async def main():
-
-    # Read config file
+    
+    # Instantiate rate limiters
+    limiters = {
+        "order_book": LogRateLimiter(cooldown_period_ms=5000),
+        "trades": LogRateLimiter(cooldown_period_ms=5000),
+        "ohlcv": LogRateLimiter(cooldown_period_ms=5000),
+        "ticker": LogRateLimiter(cooldown_period_ms=5000),
+    }
+    
     config = await load_config('../config/config.yaml')
 
-    # Initialize database and get
     async_session_factory = await database_setup(user=config['credentials']['user'],
                                                  password=config['credentials']['password'],
                                                  host=config['credentials']['host'],
@@ -350,27 +449,32 @@ async def main():
     # Initialize exchange
     exchange_objects = await initialize_exchanges(exchange_names=config['exchanges'].keys())
 
-    # Load markets
+    # Load markets and create tasks
+    tasks = []
     for exchange_id, exchange in exchange_objects.items():
         try:
             markets = await exchange.load_markets()
             print(f"Markets loaded for {exchange_id}")
-            print(markets)
+            
+            symbols = config['exchanges'][exchange_id]['symbols']
+            timeframe = config['settings']['timeframe']
+            candle_limit = config['settings']['candle_limit']
+            orderbook_depth = config['settings']['orderbook_depth']       
+            
+            for symbol in symbols:
+                task = watch_market_data(exchange=exchange,
+                                         symbol=symbol,
+                                         session_factory=async_session_factory,
+                                         timeframe=timeframe,
+                                         candle_limit=candle_limit,
+                                         orderbook_depth=orderbook_depth,
+                                         log_rate_limiters=limiters)
+                tasks.append(task)
+
         except Exception as e:
-            print(f"Error loading markets for {exchange_id}: {str(e)}")
+            print(f"{str(e)}")
 
-    # Run loops for each exchange and its symbols
-    loops = [exchange_loop(
-        exchange_id=exchange_id,
-        exchange=exchange_objects[exchange_id],
-        symbols=config['exchanges'][exchange_id]['symbols'],
-        session_factory=async_session_factory,
-        timeframe=config['settings']['timeframe'],
-        candle_limit=config['settings']['candle_limit'],
-        orderbook_depth=config['settings']['orderbook_depth'])
-             for exchange_id in config['exchanges']]
-
-    await asyncio.gather(*loops, return_exceptions=False)
+    await asyncio.gather(*tasks, return_exceptions=False)
 
 if __name__ == "__main__":
     asyncio.run(main())
