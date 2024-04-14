@@ -18,4 +18,4 @@ credentials:
   password: root
   host: localhost
   port: 3306
-  db_name: crypto_test
+  db_name: crypto_test_1
