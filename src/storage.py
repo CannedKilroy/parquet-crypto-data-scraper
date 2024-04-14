@@ -6,15 +6,15 @@ table_orderbook = Table(
    'orderbook', 
    meta, 
    Column('id', Integer, primary_key = True),
-   Column('exchange', String(32), index = True, nullable = False),
-   Column('symbol', String(16), index = True, nullable = False),
+   Column('exchange', String(32), index = True),
+   Column('symbol', String(16), index = True),
    
-   Column('asks', JSON, nullable = False),
-   Column('bids', JSON, nullable = False),
-   Column('nonce', String(32), nullable = True),
+   Column('asks', JSON),
+   Column('bids', JSON),
+   Column('nonce', String(32)),
    
-   Column('datetime', DATETIME),
-   Column('created_at', BigInteger, nullable = False, index = True)
+   Column('date_time', DATETIME, index = True),
+   Column('created_at', BigInteger, index = True)
    )
 
 table_ticker = Table(
@@ -42,7 +42,7 @@ table_ticker = Table(
     Column('quote_volume', REAL),
     Column('info', JSON), #original ticker data from exchange
    
-    Column('datetime', DATETIME),
+    Column('date_time', DATETIME, index = True),
     Column('created_at', BigInteger, index = True)
 )
 
@@ -64,7 +64,7 @@ table_trades = Table(
     Column('fee', JSON),
     Column('fees', JSON),
    
-    Column('datetime', DATETIME),
+    Column('date_time', DATETIME, index = True),
     Column('created_at', BigInteger, index = True)
 )
 
@@ -81,7 +81,7 @@ table_ohlcv = Table(
     Column('close_price', REAL),
     Column('candle_volume', REAL),
     
-    Column('datetime', DATETIME),    
+    Column('date_time', DATETIME, index = True),    
     Column('created_at', BigInteger, index = True)
     )
 
@@ -89,12 +89,13 @@ table_logs = Table(
     'logs',
     meta,
     Column('id', Integer, primary_key = True),
-    Column('exchange', String(32)),
-    Column('symbol', String(32)),
+    Column('exchange', String(32), index = True),
+    Column('symbol', String(16), index = True),
     
     Column('error_type', String(64)),
     Column('message', String(512)),
     Column('stream', String(32)),
     
+    Column('date_time', DATETIME, index = True),
     Column('created_at', BigInteger, index = True)
     )

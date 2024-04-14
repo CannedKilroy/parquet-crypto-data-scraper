@@ -1,6 +1,6 @@
+import sys
 import ccxt.pro
 import asyncio
-import sys
 import datetime
 import yaml
 
@@ -11,6 +11,9 @@ from sqlalchemy.orm import sessionmaker
 
 from storage import meta, table_ohlcv, table_orderbook
 from storage import table_trades, table_ticker, table_logs
+
+print('Python version: ', sys.version_info)
+print(sys.executable)
 
 print('Python version: ', sys.version_info)
 if sys.version_info < (3, 7):
@@ -56,6 +59,7 @@ class LogRateLimiter:
         :param created_at: The timestamp (in milliseconds) when the log entry was created.
         '''    
         now_ms = int(datetime.datetime.utcnow().timestamp() * 1000)  # Current time in milliseconds
+        date_time = datetime.datetime.fromtimestamp(now_ms / 1000)
         
         if self.last_log_time is None or (now_ms - self.last_log_time) >= self.cooldown_period:
             async with session_factory() as session:
@@ -67,6 +71,7 @@ class LogRateLimiter:
                             message=message,
                             stream=stream,
                             error_type=error_type,
+                            date_time=date_time,
                             created_at=created_at  
                         ))
             self.last_log_time = now_ms
@@ -112,7 +117,7 @@ async def watch_order_book(exchange: ccxt.pro.Exchange,
                             asks=orderbook['asks'],
                             bids=orderbook['bids'],
                             nonce=orderbook['nonce'],
-                            datetime=datetime.datetime.fromisoformat(
+                            date_time=datetime.datetime.fromisoformat(
                                 orderbook['datetime']),
                             created_at=orderbook['timestamp']))
 
@@ -169,7 +174,7 @@ async def watch_trades(exchange: ccxt.pro.Exchange,
                                 cost=trade['cost'],
                                 fee=trade['fee'],
                                 fees=trade['fees'] if trade['fees'] else None,
-                                datetime=datetime.datetime.fromisoformat(
+                                date_time=datetime.datetime.fromisoformat(
                                     trade['datetime']),
                                 created_at=trade['timestamp']))
         except Exception as e:
@@ -234,7 +239,7 @@ async def watch_ohlcv(exchange: ccxt.pro.Exchange,
                                 close_price=last_candle[0][4],
                                 candle_volume=last_candle[0][5],
                                 created_at=last_candle[0][0],
-                                datetime=datetime.datetime.utcfromtimestamp(
+                                date_time=datetime.datetime.utcfromtimestamp(
                                     last_candle[0][0]/1000)))
                     last_candle = candle
         except Exception as e:
@@ -296,7 +301,7 @@ async def watch_ticker(exchange: ccxt.pro.Exchange,
                             base_volume=ticker['baseVolume'],
                             quote_volume=ticker['quoteVolume'],
                             info=ticker['info'],
-                            datetime=datetime.datetime.fromisoformat(ticker['datetime']),
+                            date_time=datetime.datetime.fromisoformat(ticker['datetime']),
                             created_at=ticker['timestamp']))
 
         except Exception as e:
