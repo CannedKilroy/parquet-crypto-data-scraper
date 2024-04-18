@@ -5,6 +5,7 @@ description = "An async crypto futures data scraper using ccxt a"
 authors = ["CannedKilroy <GenericArt@protonmail.com>"]
 license = "MIT"
 readme = "README.md"
+package-mode = false
 
 [tool.poetry.dependencies]
 python = "^3.11"
