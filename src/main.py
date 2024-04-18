@@ -2,7 +2,6 @@ import sys
 import ccxt.pro
 import asyncio
 import datetime
-import yaml
 
 from typing import List, Callable
 from sqlalchemy import text
@@ -11,21 +10,21 @@ from sqlalchemy.orm import sessionmaker
 
 from storage import meta, table_ohlcv, table_orderbook
 from storage import table_trades, table_ticker, table_logs
+from helpers import load_config
 
 print('Python version: ', sys.version_info)
-print(sys.executable)
+print('Sys executable: ', sys.executable)
+print('CCXT version', ccxt.pro.__version__)
 
-print('Python version: ', sys.version_info)
 if sys.version_info < (3, 7):
     print("This script requires Python 3.7 or higher.")
     sys.exit(1)
-print('CCXT version', ccxt.pro.__version__)
 
 
 async def exchange_exists(exchange_name):
     pass
 
-
+    
 class LogRateLimiter:
     '''
     Log rate limiter that handles writing logs 
@@ -76,11 +75,6 @@ class LogRateLimiter:
                         ))
             self.last_log_time = now_ms
             print('Error is logged')
-
-
-async def load_config(file_path):
-    with open(file_path, 'r') as file:
-        return yaml.safe_load(file)
 
 
 async def watch_order_book(exchange: ccxt.pro.Exchange,
@@ -444,7 +438,7 @@ async def main():
         "ticker": LogRateLimiter(cooldown_period_ms=5000),
     }
     
-    config = await load_config('../config/config.yaml')
+    config = await load_config()
 
     async_session_factory = await database_setup(user=config['credentials']['user'],
                                                  password=config['credentials']['password'],
