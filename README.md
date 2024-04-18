@@ -25,7 +25,7 @@ It is not suitable for realtime trading. It's intended for gathering reatlime da
 - Edit `config` file inside `config/` for database credentials, the exchanges / symbols you want, etc. The CCXT symbol naming conventions can be found [here](https://docs.ccxt.com/#/?id=contract-naming-conventions)
 
 ## Usage
-- `poetry run python main.py`
+- `poetry run python src/main.py`
 
 ## DB Diagram
 ![Alt Text](https://github.com/CannedKilroy/crypto/blob/main/Assets/crypto_websocket_stream_resized.png)
