@@ -7,7 +7,7 @@ A python-based data pipeline that uses the CCXT and SQLAlchemy libraries to asyn
 It is not suitable for realtime trading. It's intended for gathering reatlime data for backtesting / research, an alternative to expensive 3rd party data providers. 
 
 ## Dependencies
-- Python 3.7 or newer
+- Python 3.11 or newer
 - SQLalchemy
 - MySQL
 - CCXT
