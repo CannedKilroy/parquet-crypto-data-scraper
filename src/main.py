@@ -16,8 +16,8 @@ print('Python version: ', sys.version_info)
 print('Sys executable: ', sys.executable)
 print('CCXT version', ccxt.pro.__version__)
 
-if sys.version_info < (3, 7):
-    print("This script requires Python 3.7 or higher.")
+if sys.version_info < (3, 11):
+    print("This script requires Python 3.11 or higher.")
     sys.exit(1)
 
 
