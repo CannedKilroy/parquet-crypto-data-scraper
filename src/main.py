@@ -33,7 +33,7 @@ class LogRateLimiter:
     is logged to keep time consistant between the logs 
     and data tables.
     '''
-    def __init__(self, cooldown_period_ms: int =5000) -> None:
+    def __init__(self, cooldown_period_ms: int = 5000) -> None:
         
         self.cooldown_period = cooldown_period_ms
         self.last_log_time = None
@@ -48,6 +48,9 @@ class LogRateLimiter:
                          created_at:int) -> None:
         '''
         Writes logs to the database with a cooldown period to prevent spamming.
+        This includes the id of the last successful entry in the table that raised the error,
+        for that specific symbol / exchange, to make it easier to find holes in the data due to 
+        the lag between when the error occurs and being caught / logged. 
 
         :param session_factory: A callable that returns an AsyncSession object for database operations.
         :param exchange: The name of the cryptocurrency exchange.
@@ -56,19 +59,43 @@ class LogRateLimiter:
         :param message: The error message.
         :param stream: The data stream from which the error originated.
         :param created_at: The timestamp (in milliseconds) when the log entry was created.
-        '''    
-        now_ms = int(datetime.datetime.utcnow().timestamp() * 1000)  # Current time in milliseconds
+        '''
+        # For converting stream names to the table names
+        stream_table_name = {'watch_order_book': 'orderbook',
+                             'watch_ticker': 'ticker',
+                             'watch_trades': 'trades',
+                             'watch_ohlcv': 'ohlcv'}
+
+        now_ms = int(datetime.datetime.now(datetime.UTC).timestamp() * 1000)  # Current time in milliseconds
         date_time = datetime.datetime.fromtimestamp(now_ms / 1000)
+        
+        # Get the id of the last successful entry
+        sql = text(f'''SELECT id
+        FROM {stream_table_name[stream]} 
+        WHERE exchange = :exchange
+        AND symbol = :symbol
+        ORDER BY id DESC
+        LIMIT 1''')
         
         if self.last_log_time is None or (now_ms - self.last_log_time) >= self.cooldown_period:
             async with session_factory() as session:
                 async with session.begin():
+                            
+                    last_entry = await session.execute(
+                        sql, 
+                        {'exchange': exchange, 'symbol': symbol})
+                    try:
+                        last_valid_stream_id = last_entry.scalar_one()
+                    except Exception:
+                        last_valid_stream_id = None
+                    
                     await session.execute(
                         table_logs.insert().values(
                             exchange=exchange,
                             symbol=symbol,
                             message=message,
                             stream=stream,
+                            last_valid_stream_id=last_valid_stream_id,
                             error_type=error_type,
                             date_time=date_time,
                             created_at=created_at  
@@ -119,7 +146,7 @@ async def watch_order_book(exchange: ccxt.pro.Exchange,
             error_type = e.__class__.__name__
             message = str(e)
             
-            created_at = int(datetime.datetime.utcnow().timestamp()*1000)
+            created_at = int(datetime.datetime.now(datetime.UTC).timestamp()*1000)
             print('Type: ', error_type)
             print('Error: ', e)
 
@@ -175,7 +202,7 @@ async def watch_trades(exchange: ccxt.pro.Exchange,
             error_type = e.__class__.__name__
             message = str(e)
             
-            created_at = int(datetime.datetime.utcnow().timestamp()*1000)
+            created_at = int(datetime.datetime.now(datetime.UTC).timestamp()*1000)
             print('Type: ', error_type)
             print('Error: ', e)
 
@@ -240,7 +267,7 @@ async def watch_ohlcv(exchange: ccxt.pro.Exchange,
             error_type = e.__class__.__name__
             message = str(e)
             
-            created_at = int(datetime.datetime.utcnow().timestamp()*1000)
+            created_at = int(datetime.datetime.now(datetime.UTC).timestamp()*1000)
             print('Type: ', error_type)
             print('Error: ', e)
        
@@ -296,13 +323,13 @@ async def watch_ticker(exchange: ccxt.pro.Exchange,
                             quote_volume=ticker['quoteVolume'],
                             info=ticker['info'],
                             date_time=datetime.datetime.fromisoformat(ticker['datetime']),
-                            created_at=ticker['timestamp']))
+                            created_at=ticker['timestamp'])) # When the response was generated
 
         except Exception as e:
             error_type = e.__class__.__name__
             message = str(e)
             
-            created_at = int(datetime.datetime.utcnow().timestamp()*1000)
+            created_at = int(datetime.datetime.now(datetime.UTC).timestamp()*1000)
             print('Type: ', error_type)
             print('Error: ', e)
        

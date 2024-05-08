@@ -1,5 +1,5 @@
 #datastorage
-from sqlalchemy import create_engine, Table, Column, Integer, String, MetaData, JSON, REAL, DATETIME, INT, UniqueConstraint, BigInteger
+from sqlalchemy import Table, Column, Integer, String, MetaData, JSON, REAL, DATETIME, BigInteger
 meta = MetaData()
 
 table_orderbook = Table(
@@ -95,6 +95,11 @@ table_logs = Table(
     Column('error_type', String(64)),
     Column('message', String(512)),
     Column('stream', String(32)),
+    
+    # When an error is raised, this is the id for the last successful record in that stream, with that exchange / symbol
+    # This is to make it easier to find holes in the time series data due to the lag of the error being caught 
+    # and raised, and the exchange time 
+    Column('last_valid_stream_id', Integer, nullable=True, index = True),
     
     Column('date_time', DATETIME, index = True),
     Column('created_at', BigInteger, index = True)
