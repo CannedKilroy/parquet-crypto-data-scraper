@@ -43,7 +43,6 @@ A single inverse bitcoin futures contract generates approximatly ~15-35 gigabyte
 
 ### TODO:
 - Fix issue with exchanges timing out when loading markets. Load markets with the exchange loop.
-- In the logs, add a foreign key that is the ID of the last successful websocket response, since there is a delay between the UTC timestamp and the returned timstamp. This makes it much easier to find holes in the time series data, without the confusion of adding the last returned websocket response timestamp as the error timestamp.  
 - Allow for variable keyowrd args in exchange loop, so user can additional args if needed such as timeout etc.
 - Switch to logging
 - Add Apache Airflow
