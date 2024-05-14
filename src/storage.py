@@ -63,6 +63,8 @@ table_trades = Table(
     Column('cost', REAL),
     Column('fee', JSON),
     Column('fees', JSON),
+    Column('info', JSON), #original ticker data from exchange
+    
    
     Column('date_time', DATETIME, index = True),
     Column('created_at', BigInteger, index = True)

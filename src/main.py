@@ -7,6 +7,7 @@ from typing import List, Callable
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.sql import null
 
 from storage import meta, table_ohlcv, table_orderbook
 from storage import table_trades, table_ticker, table_logs
@@ -102,7 +103,14 @@ class LogRateLimiter:
                         ))
             self.last_log_time = now_ms
             print('Error is logged')
-
+            
+def format_to_none(value):
+    '''
+    Covert 'null' str to None value
+    '''
+    if (value is None) or (value == 'null') or (value == []):
+        return null()
+    return value
 
 async def watch_order_book(exchange: ccxt.pro.Exchange,
                            symbol: str,
@@ -119,6 +127,7 @@ async def watch_order_book(exchange: ccxt.pro.Exchange,
     :param orderbook_depth: The orderbook depth
     :param session_factory: Generates AsyncSession for database
            operations.
+    :param log_rate_limiter: Database logger
     '''
     name = getattr(exchange, 'name')
     orderbook = None
@@ -171,6 +180,7 @@ async def watch_trades(exchange: ccxt.pro.Exchange,
     :param symbol: The specific trading symbol to watch
     :param session_factory: Generates AsyncSession for database
            operations.
+    :param log_rate_limiter: Database logger
     '''
     name = getattr(exchange, 'name')
     trades = None
@@ -180,7 +190,11 @@ async def watch_trades(exchange: ccxt.pro.Exchange,
 
             async with session_factory() as session:
                 async with session.begin():
+                    
                     for trade in trades:
+                        fee = format_to_none(trade['fee'])
+                        fees = format_to_none(trade['fees'])
+                        
                         await session.execute(
                             table_trades.insert().values(
                                 exchange=name,
@@ -193,8 +207,9 @@ async def watch_trades(exchange: ccxt.pro.Exchange,
                                 executed_price=trade['price'],
                                 base_amount=trade['amount'],
                                 cost=trade['cost'],
-                                fee=trade['fee'],
-                                fees=trade['fees'] if trade['fees'] else None,
+                                fee=fee,
+                                fees=fees,
+                                info=trade['info'],                                
                                 date_time=datetime.datetime.fromisoformat(
                                     trade['datetime']),
                                 created_at=trade['timestamp']))
@@ -233,6 +248,7 @@ async def watch_ohlcv(exchange: ccxt.pro.Exchange,
     :param candle_limit: The number of candles to fetch
     :param session_factory: Generates AsyncSession for database
            operations.
+    :param log_rate_limiter: Database logger
     '''
     last_candle = None
     candle = None
@@ -292,6 +308,7 @@ async def watch_ticker(exchange: ccxt.pro.Exchange,
     :param symbol: The specific trading symbol to watch
     :param session_factory: Generates AsyncSession for database
     operations.
+    :param log_rate_limiter: Database logger
     '''
     name = getattr(exchange, 'name')
 
@@ -361,6 +378,7 @@ async def watch_market_data(exchange: ccxt.pro.Exchange,
     :param timeframe: The timeframe for the OHLCV data.
     :param candle_limit: The number of candles to fetch for OHLCV data.
     :param orderbook_depth: The depth of the order book to maintain.
+    :param log_rate_limiters: Dict of log rate limiters, every stream gets its own
     '''
 
     loops = []
