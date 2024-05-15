@@ -3,7 +3,7 @@ import ccxt.pro
 import asyncio
 import datetime
 
-from typing import List, Callable
+from typing import List, Callable, Union
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
@@ -20,10 +20,6 @@ print('CCXT version', ccxt.pro.__version__)
 if sys.version_info < (3, 11):
     print("This script requires Python 3.11 or higher.")
     sys.exit(1)
-
-
-async def exchange_exists(exchange_name):
-    pass
 
     
 class LogRateLimiter:
@@ -60,6 +56,7 @@ class LogRateLimiter:
         :param message: The error message.
         :param stream: The data stream from which the error originated.
         :param created_at: The timestamp (in milliseconds) when the log entry was created.
+        :return: None
         '''
         # For converting stream names to the table names
         stream_table_name = {'watch_order_book': 'orderbook',
@@ -106,7 +103,10 @@ class LogRateLimiter:
             
 def format_to_none(value):
     '''
-    Covert 'null' str to None value
+    Convert ccxt json nulls into proper sqlalchemy nulls.
+    
+    :param value: The value to be checked if null
+    :return: value or sqlalchemy null
     '''
     if (value is None) or (value == 'null') or (value == []):
         return null()
@@ -128,14 +128,13 @@ async def watch_order_book(exchange: ccxt.pro.Exchange,
     :param session_factory: Generates AsyncSession for database
            operations.
     :param log_rate_limiter: Database logger
+    :return: None
     '''
     name = getattr(exchange, 'name')
     orderbook = None
     
     while True:
         try:
-            
-            #expriment
             orderbook = await exchange.watch_order_book(symbol, orderbook_depth)
 
             async with session_factory() as session:
@@ -181,6 +180,7 @@ async def watch_trades(exchange: ccxt.pro.Exchange,
     :param session_factory: Generates AsyncSession for database
            operations.
     :param log_rate_limiter: Database logger
+    :return: None
     '''
     name = getattr(exchange, 'name')
     trades = None
@@ -249,6 +249,7 @@ async def watch_ohlcv(exchange: ccxt.pro.Exchange,
     :param session_factory: Generates AsyncSession for database
            operations.
     :param log_rate_limiter: Database logger
+    :return: None
     '''
     last_candle = None
     candle = None
@@ -309,6 +310,7 @@ async def watch_ticker(exchange: ccxt.pro.Exchange,
     :param session_factory: Generates AsyncSession for database
     operations.
     :param log_rate_limiter: Database logger
+    :return: None
     '''
     name = getattr(exchange, 'name')
 
@@ -379,6 +381,7 @@ async def watch_market_data(exchange: ccxt.pro.Exchange,
     :param candle_limit: The number of candles to fetch for OHLCV data.
     :param orderbook_depth: The depth of the order book to maintain.
     :param log_rate_limiters: Dict of log rate limiters, every stream gets its own
+    :return: None
     '''
 
     loops = []
