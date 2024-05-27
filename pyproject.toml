@@ -1,7 +1,7 @@
 [tool.poetry]
-name = "crypto-data-scraper"
+name = "parquet-crypto-data-scraper"
 version = "0.1.0"
-description = "An async crypto futures data scraper using ccxt a"
+description = "An async crypto futures data scraper into parquet using ccxt"
 authors = ["CannedKilroy <GenericArt@protonmail.com>"]
 license = "MIT"
 readme = "README.md"
